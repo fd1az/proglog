@@ -1,0 +1,16 @@
+{
+  "CN": "My Awesome CA",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "AR",
+      "L": "RM",
+      "ST": "BSAS",
+      "O": "fdiaz proglog",
+      "OU": "CA Services"
+    }
+  ]
+}
