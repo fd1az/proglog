@@ -23,16 +23,19 @@ func newIndex(f *os.File, c Config) (*index, error) {
 	idx := &index{
 		file: f,
 	}
+
 	fi, err := os.Stat(f.Name())
 	if err != nil {
 		return nil, err
 	}
+
 	idx.size = uint64(fi.Size())
 	if err = os.Truncate(
 		f.Name(), int64(c.Segment.MaxIndexBytes),
 	); err != nil {
 		return nil, err
 	}
+
 	if idx.mmap, err = gommap.Map(
 		idx.file.Fd(),
 		gommap.PROT_READ|gommap.PROT_WRITE,
@@ -40,8 +43,10 @@ func newIndex(f *os.File, c Config) (*index, error) {
 	); err != nil {
 		return nil, err
 	}
+
 	return idx, nil
 }
+
 func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
 	if i.size == 0 {
 		return 0, 0, io.EOF

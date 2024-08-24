@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
-	"io/ioutil"
+	"flag"
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opencensus.io/examples/exporter"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	"github.com/fd1az/proglog/internal/config"
@@ -20,6 +23,20 @@ import (
 	"github.com/fd1az/proglog/internal/auth"
 	"github.com/fd1az/proglog/internal/log"
 )
+
+var debug = flag.Bool("debug", false, "Enable observability for debugging.")
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	if *debug {
+		logger, err := zap.NewDevelopment()
+		if err != nil {
+			panic(err)
+		}
+		zap.ReplaceGlobals(logger)
+	}
+	os.Exit(m.Run())
+}
 
 func TestServer(t *testing.T) {
 	for scenario, fn := range map[string]func(
@@ -68,10 +85,12 @@ func setupTest(t *testing.T, fn func(*Config)) (
 			Server:   false,
 		})
 		require.NoError(t, err)
+
 		tlsCreds := credentials.NewTLS(tlsConfig)
 		opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
-		conn, err := grpc.Dial(l.Addr().String(), opts...)
+		conn, err := grpc.NewClient(l.Addr().String(), opts...)
 		require.NoError(t, err)
+
 		client := api.NewLogClient(conn)
 		return conn, client, opts
 	}
@@ -97,7 +116,7 @@ func setupTest(t *testing.T, fn func(*Config)) (
 	require.NoError(t, err)
 	serverCreds := credentials.NewTLS(serverTLSConfig)
 
-	dir, err := ioutil.TempDir("", "server-test")
+	dir, err := os.MkdirTemp("", "server-test")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
@@ -105,6 +124,28 @@ func setupTest(t *testing.T, fn func(*Config)) (
 	require.NoError(t, err)
 
 	authorizer := auth.New(config.ACLModelFile, config.ACLPolicyFile)
+
+	// START: telemetry
+	var telemetryExporter *exporter.LogExporter
+	if *debug {
+		metricsLogFile, err := os.CreateTemp("", "metrics-*.log")
+		require.NoError(t, err)
+		t.Logf("metrics log file: %s", metricsLogFile.Name())
+
+		tracesLogFile, err := os.CreateTemp("", "traces-*.log")
+		require.NoError(t, err)
+		t.Logf("traces log file: %s", tracesLogFile.Name())
+
+		telemetryExporter, err = exporter.NewLogExporter(exporter.Options{
+			MetricsLogFile:    metricsLogFile.Name(),
+			TracesLogFile:     tracesLogFile.Name(),
+			ReportingInterval: time.Second,
+		})
+		require.NoError(t, err)
+		err = telemetryExporter.Start()
+		require.NoError(t, err)
+	}
+
 	cfg = &Config{
 		CommitLog:  clog,
 		Authorizer: authorizer,
@@ -125,6 +166,12 @@ func setupTest(t *testing.T, fn func(*Config)) (
 		rootConn.Close()
 		nobodyConn.Close()
 		l.Close()
+
+		if telemetryExporter != nil {
+			time.Sleep(1500 * time.Millisecond)
+			telemetryExporter.Stop()
+			telemetryExporter.Close()
+		}
 	}
 }
 
@@ -301,7 +348,7 @@ func setupTest1(t *testing.T, fn func(*Config)) (
 	require.NoError(t, err)
 	serverCreds := credentials.NewTLS(serverTLSConfig)
 
-	dir, err := ioutil.TempDir("", "server-test")
+	dir, err := os.MkdirTemp("", "server-test")
 	require.NoError(t, err)
 
 	clog, err := log.NewLog(dir, log.Config{})
@@ -363,7 +410,7 @@ func setupTest2(t *testing.T, fn func(*Config)) (
 	require.NoError(t, err)
 	serverCreds := credentials.NewTLS(serverTLSConfig)
 
-	dir, err := ioutil.TempDir("", "server-test")
+	dir, err := os.MkdirTemp("", "server-test")
 	require.NoError(t, err)
 
 	clog, err := log.NewLog(dir, log.Config{})

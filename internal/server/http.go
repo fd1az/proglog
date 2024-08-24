@@ -12,6 +12,7 @@ func NewHTTPServer(addr string) *http.Server {
 	r := mux.NewRouter()
 	r.HandleFunc("/", httpsrv.handleProduce).Methods("POST")
 	r.HandleFunc("/", httpsrv.handleConsume).Methods("GET")
+
 	return &http.Server{
 		Addr:    addr,
 		Handler: r,
@@ -43,16 +44,19 @@ type ConsumeResponse struct {
 
 func (s *httpServer) handleProduce(w http.ResponseWriter, r *http.Request) {
 	var req ProduceRequest
+
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	off, err := s.Log.Append(req.Record)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	res := ProduceResponse{Offset: off}
 	err = json.NewEncoder(w).Encode(res)
 	if err != nil {
@@ -63,6 +67,7 @@ func (s *httpServer) handleProduce(w http.ResponseWriter, r *http.Request) {
 
 func (s *httpServer) handleConsume(w http.ResponseWriter, r *http.Request) {
 	var req ConsumeRequest
+
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -73,6 +78,7 @@ func (s *httpServer) handleConsume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"os"
 )
 
 type TLSConfig struct {
@@ -32,7 +32,7 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	}
 
 	if cfg.CAFile != "" {
-		b, err := ioutil.ReadFile(cfg.CAFile)
+		b, err := os.ReadFile(cfg.CAFile)
 
 		if err != nil {
 			return nil, err
@@ -54,6 +54,7 @@ func SetupTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 		} else {
 			tlsConfig.RootCAs = ca
 		}
+
 		tlsConfig.ServerName = cfg.ServerAddress
 	}
 

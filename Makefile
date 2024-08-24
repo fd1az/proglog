@@ -76,4 +76,7 @@ compile:
 		--go-grpc_opt=paths=source_relative \
 		--proto_path=.
 
-# END: begin
+generate:
+	echo running code generation
+	go generate ./...
+	echo done
