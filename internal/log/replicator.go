@@ -1,162 +1,164 @@
 package log
 
-import (
-	"context"
-	"sync"
+// No need this replicator.go file anymore because it's not used in the final implementation. We are using the agent.go file instead. that uses Raft for replication.
 
-	api "github.com/fd1az/proglog/api/v1"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-)
+// import (
+// 	"context"
+// 	"sync"
 
-type Replicator struct {
-	DialOptions []grpc.DialOption
-	LocalServer api.LogClient
+// 	api "github.com/fd1az/proglog/api/v1"
+// 	"go.uber.org/zap"
+// 	"google.golang.org/grpc"
+// )
 
-	logger *zap.Logger
+// type Replicator struct {
+// 	DialOptions []grpc.DialOption
+// 	LocalServer api.LogClient
 
-	mu      sync.Mutex
-	servers map[string]chan struct{}
-	closed  bool
-	close   chan struct{}
-}
+// 	logger *zap.Logger
 
-func (r *Replicator) Join(name, addr string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.init()
+// 	mu      sync.Mutex
+// 	servers map[string]chan struct{}
+// 	closed  bool
+// 	close   chan struct{}
+// }
 
-	if r.closed {
-		return nil
-	}
+// func (r *Replicator) Join(name, addr string) error {
+// 	r.mu.Lock()
+// 	defer r.mu.Unlock()
+// 	r.init()
 
-	if _, ok := r.servers[name]; ok {
-		// already replicating so skip
-		return nil
-	}
+// 	if r.closed {
+// 		return nil
+// 	}
 
-	r.servers[name] = make(chan struct{})
+// 	if _, ok := r.servers[name]; ok {
+// 		// already replicating so skip
+// 		return nil
+// 	}
 
-	go r.replicate(addr, r.servers[name])
+// 	r.servers[name] = make(chan struct{})
 
-	return nil
-}
+// 	go r.replicate(addr, r.servers[name])
 
-func (r *Replicator) replicate(addr string, leave chan struct{}) {
-	cc, err := grpc.Dial(addr, r.DialOptions...)
-	if err != nil {
-		r.logError(err, "failed to dial", addr)
-		return
-	}
+// 	return nil
+// }
 
-	defer cc.Close()
+// func (r *Replicator) replicate(addr string, leave chan struct{}) {
+// 	cc, err := grpc.NewClient(addr, r.DialOptions...)
+// 	if err != nil {
+// 		r.logError(err, "failed to dial", addr)
+// 		return
+// 	}
 
-	client := api.NewLogClient(cc)
+// 	defer cc.Close()
 
-	ctx := context.Background()
-	stream, err := client.ConsumeStream(ctx,
-		&api.ConsumeRequest{
-			Offset: 0,
-		},
-	)
+// 	client := api.NewLogClient(cc)
 
-	if err != nil {
-		r.logError(err, "failed to consume", addr)
-		return
-	}
+// 	ctx := context.Background()
+// 	stream, err := client.ConsumeStream(ctx,
+// 		&api.ConsumeRequest{
+// 			Offset: 0,
+// 		},
+// 	)
 
-	records := make(chan *api.Record)
+// 	if err != nil {
+// 		r.logError(err, "failed to consume", addr)
+// 		return
+// 	}
 
-	go func() {
-		for {
-			recv, err := stream.Recv()
-			if err != nil {
-				r.logError(err, "failed to receive", addr)
-				return
-			}
-			records <- recv.Record
-		}
-	}()
+// 	records := make(chan *api.Record)
 
-	// END: start_add
-	// START: end_add
-	for {
-		select {
-		case <-r.close:
-			return
-		case <-leave:
-			return
-		case record := <-records:
-			_, err = r.LocalServer.Produce(ctx,
-				&api.ProduceRequest{
-					Record: record,
-				},
-			)
-			if err != nil {
-				r.logError(err, "failed to produce", addr)
-				return
-			}
-		}
-	}
-}
+// 	go func() {
+// 		for {
+// 			recv, err := stream.Recv()
+// 			if err != nil {
+// 				r.logError(err, "failed to receive", addr)
+// 				return
+// 			}
+// 			records <- recv.Record
+// 		}
+// 	}()
 
-func (r *Replicator) Leave(name string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+// 	// END: start_add
+// 	// START: end_add
+// 	for {
+// 		select {
+// 		case <-r.close:
+// 			return
+// 		case <-leave:
+// 			return
+// 		case record := <-records:
+// 			_, err = r.LocalServer.Produce(ctx,
+// 				&api.ProduceRequest{
+// 					Record: record,
+// 				},
+// 			)
+// 			if err != nil {
+// 				r.logError(err, "failed to produce", addr)
+// 				return
+// 			}
+// 		}
+// 	}
+// }
 
-	r.init()
+// func (r *Replicator) Leave(name string) error {
+// 	r.mu.Lock()
+// 	defer r.mu.Unlock()
 
-	if _, ok := r.servers[name]; !ok {
-		return nil
-	}
+// 	r.init()
 
-	close(r.servers[name])
-	delete(r.servers, name)
+// 	if _, ok := r.servers[name]; !ok {
+// 		return nil
+// 	}
 
-	return nil
-}
+// 	close(r.servers[name])
+// 	delete(r.servers, name)
 
-func (r *Replicator) init() {
-	if r.logger == nil {
-		r.logger = zap.L().Named("replicator")
-	}
+// 	return nil
+// }
 
-	if r.servers == nil {
-		r.servers = make(map[string]chan struct{})
-	}
+// func (r *Replicator) init() {
+// 	if r.logger == nil {
+// 		r.logger = zap.L().Named("replicator")
+// 	}
 
-	if r.close == nil {
-		r.close = make(chan struct{})
-	}
-}
+// 	if r.servers == nil {
+// 		r.servers = make(map[string]chan struct{})
+// 	}
 
-// END: init
+// 	if r.close == nil {
+// 		r.close = make(chan struct{})
+// 	}
+// }
 
-// START: close
-func (r *Replicator) Close() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.init()
+// // END: init
 
-	if r.closed {
-		return nil
-	}
+// // START: close
+// func (r *Replicator) Close() error {
+// 	r.mu.Lock()
+// 	defer r.mu.Unlock()
+// 	r.init()
 
-	r.closed = true
-	close(r.close)
+// 	if r.closed {
+// 		return nil
+// 	}
 
-	return nil
-}
+// 	r.closed = true
+// 	close(r.close)
 
-// END: close
+// 	return nil
+// }
 
-// START: err
-func (r *Replicator) logError(err error, msg, addr string) {
-	r.logger.Error(
-		msg,
-		zap.String("addr", addr),
-		zap.Error(err),
-	)
-}
+// // END: close
 
-// END: err
+// // START: err
+// func (r *Replicator) logError(err error, msg, addr string) {
+// 	r.logger.Error(
+// 		msg,
+// 		zap.String("addr", addr),
+// 		zap.Error(err),
+// 	)
+// }
+
+// // END: err
