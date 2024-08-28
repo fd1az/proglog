@@ -1,5 +1,6 @@
 # START: begin
 CONFIG_PATH=${PWD}
+TAG ?= 0.0.9
 
 .PHONY: init
 init:
@@ -80,3 +81,7 @@ generate:
 	echo running code generation
 	go generate ./...
 	echo done
+
+
+build:
+	 docker build -t github.com/fd1az/proglog:$(TAG) .
