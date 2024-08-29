@@ -1,0 +1,19 @@
+{
+  "CN": "client",
+  "hosts": [
+    ""
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "AR",
+      "L": "RM",
+      "ST": "BSAS",
+      "O": "fdiaz proglog",
+      "OU": "Distributed Services"
+    }
+  ]
+}

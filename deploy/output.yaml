@@ -1,0 +1,129 @@
+---
+# Source: proglog/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: proglog
+  namespace: default
+  labels: 
+    helm.sh/chart: proglog-0.1.0
+    app.kubernetes.io/name: proglog
+    app.kubernetes.io/instance: proglog
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: rpc
+      port: 8400
+      targetPort: 8400
+    - name: serf-tcp
+      protocol: "TCP"
+      port: 8401
+      targetPort: 8401
+    - name: serf-udp
+      protocol: "UDP"
+      port: 8401
+      targetPort: 8401
+  selector: 
+    app.kubernetes.io/name: proglog
+    app.kubernetes.io/instance: proglog
+---
+# Source: proglog/templates/statefulset.yaml
+# START: initial
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: proglog
+  namespace: default
+  labels: 
+    helm.sh/chart: proglog-0.1.0
+    app.kubernetes.io/name: proglog
+    app.kubernetes.io/instance: proglog
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels: 
+      app.kubernetes.io/name: proglog
+      app.kubernetes.io/instance: proglog
+  serviceName: proglog
+  replicas: 3
+  template:
+    metadata:
+      name: proglog
+      labels: 
+        helm.sh/chart: proglog-0.1.0
+        app.kubernetes.io/name: proglog
+        app.kubernetes.io/instance: proglog
+        app.kubernetes.io/version: "1.16.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      # initContainers...
+      # END: initial
+      # START: initial_containers
+      initContainers:
+      - name: proglog-config-init
+        image: busybox
+        imagePullPolicy: IfNotPresent
+        command:
+          - /bin/sh
+          - -c
+          - |-
+            ID=$(echo $HOSTNAME | rev | cut -d- -f1 | rev)
+            cat <<EOD > /var/run/proglog/config.yaml
+            data-dir: /var/run/proglog/data
+            rpc-port: 8400
+            bind-addr: "$HOSTNAME.proglog.default.svc.cluster.local:8401"
+            
+            start-join-addrs: "proglog-0.proglog.default.svc.cluster.local:8401"
+            
+            bootstrap: false
+            EOD
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/run/proglog
+        # START: initial
+      # END: initial_containers
+      # START: initial
+      # containers...
+      # END: initial
+      # START: containers
+      containers:
+      - name: proglog
+        image: "github.com/fd1az/proglog:0.0.3"
+        ports:
+        - containerPort: 8400
+          name: rpc
+        - containerPort: 8401
+          name: serf
+        args:
+          - --config-file=/var/run/proglog/config.yaml
+        # END: initial
+        # probes...
+        # END: containers
+        # START: probes
+        readinessProbe:
+          exec:
+            command: ["/bin/grpc_health_probe", "-addr=:8400"]
+          initialDelaySeconds: 5
+        livenessProbe:
+          exec:
+            command: ["/bin/grpc_health_probe", "-addr=:8400"]
+          initialDelaySeconds: 10
+        # END: probes
+        # START: containers
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/run/proglog
+      # END: containers
+      # START: initial
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi

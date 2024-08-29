@@ -1,6 +1,6 @@
 # START: begin
 CONFIG_PATH=${PWD}
-TAG ?= 0.0.9
+TAG ?= 1.0.0
 
 .PHONY: init
 init:
